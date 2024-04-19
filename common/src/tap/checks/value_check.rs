@@ -45,7 +45,12 @@ impl MinimumValue {
                         let deployment_id = value.deployment_id;
 
                         if let Some(query) = cache.lock().unwrap().get_mut(&deployment_id) {
-                            let _ = query.insert_model(value);
+                            let _ = query.insert_model(value).inspect_err(|err| {
+                                tracing::error!(
+                                    "Error while compiling cost model for deployment id {}. Error: {}",
+                                    deployment_id, err
+                                )
+                            });
                         } else {
                             match CostModelCache::new(value) {
                                 Ok(value) => {
