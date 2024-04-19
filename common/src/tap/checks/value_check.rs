@@ -65,6 +65,7 @@ impl MinimumValue {
             }
         });
 
+        // we use two different handles because in case one channel breaks we still have the other
         let query_handle = tokio::spawn(async move {
             loop {
                 let query = rx_query.recv().await;
@@ -96,32 +97,40 @@ impl Drop for MinimumValue {
     }
 }
 
+impl MinimumValue {
+    fn get_agora_query(&self, query_id: &Signature) -> Option<AgoraQuery> {
+        self.query_ids.lock().unwrap().remove(query_id)
+    }
+
+    fn get_expected_value(&self, query_id: &Signature) -> anyhow::Result<u128> {
+        // get query from key
+        let agora_query = self
+            .get_agora_query(query_id)
+            .ok_or(anyhow!("No query found"))?;
+
+        // get agora model for the allocation_id
+        let mut cache = self.cost_model_cache.lock().unwrap();
+        // on average, we'll have zero or one model
+        let models = cache.get_mut(&agora_query.deployment_id);
+
+        let expected_value = models
+            .map(|cache| cache.cost(&agora_query))
+            .unwrap_or_default();
+
+        Ok(expected_value)
+    }
+}
+
 #[async_trait::async_trait]
 impl Check for MinimumValue {
     async fn check(&self, receipt: &ReceiptWithState<Checking>) -> CheckResult {
         // get key
         let key = &receipt.signed_receipt().signature;
 
-        // get query from key
-        let agora_query = self
-            .query_ids
-            .lock()
-            .unwrap()
-            .remove(key)
-            .ok_or(anyhow!("No query found"))?;
-
-        // get agora model for the allocation_id
-        let mut cache = self.cost_model_cache.lock().unwrap();
-
-        // on average, we'll have zero or one model
-        let models = cache.get_mut(&agora_query.deployment_id);
+        let expected_value = self.get_expected_value(key)?;
 
         // get value
         let value = receipt.signed_receipt().message.value;
-
-        let expected_value = models
-            .map(|cache| cache.cost(&agora_query))
-            .unwrap_or_default();
 
         let should_accept = value >= expected_value;
 
