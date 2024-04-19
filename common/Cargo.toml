@@ -8,6 +8,7 @@ alloy-primitives = { version = "0.6", features = ["serde"] }
 alloy-sol-types = "0.6"
 anyhow = "1.0.75"
 arc-swap = "1.6.0"
+cost-model = { git = "https://github.com/graphprotocol/agora", rev = "3ed34ca" }
 ethers = "2.0.10"
 ethers-core = "2.0.10"
 eventuals = "0.6.7"
